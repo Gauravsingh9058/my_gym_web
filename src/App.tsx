@@ -12,13 +12,36 @@ import {
   Star,
   CheckCircle,
   ArrowRight,
-  Play
+  Play,
+  User,
+  LogIn
 } from 'lucide-react';
+import { useAuth } from './hooks/useAuth';
+import { supabase, Program, Trainer } from './lib/supabase';
+import { AuthModal } from './components/AuthModal';
+import { Dashboard } from './components/Dashboard';
+import { BookingModal } from './components/BookingModal';
 
 function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeProgram, setActiveProgram] = useState('all');
   const [scrollY, setScrollY] = useState(0);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [bookingModalOpen, setBookingModalOpen] = useState(false);
+  const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [trainers, setTrainers] = useState<Trainer[]>([]);
+  const [contactForm, setContactForm] = useState({
+    name: '',
+    email: '',
+    message: ''
+  });
+  const [contactLoading, setContactLoading] = useState(false);
+  const [contactSuccess, setContactSuccess] = useState(false);
+
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
@@ -26,65 +49,35 @@ function App() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const programs = [
-    {
-      id: 1,
-      category: 'strength',
-      title: 'Strength Training',
-      description: 'Build muscle and increase power with our comprehensive strength programs.',
-      duration: '45 min',
-      level: 'All Levels',
-      image: 'https://images.pexels.com/photos/1552252/pexels-photo-1552252.jpeg?auto=compress&cs=tinysrgb&w=800'
-    },
-    {
-      id: 2,
-      category: 'cardio',
-      title: 'HIIT Cardio',
-      description: 'High-intensity interval training to boost your metabolism and endurance.',
-      duration: '30 min',
-      level: 'Intermediate',
-      image: 'https://images.pexels.com/photos/416809/pexels-photo-416809.jpeg?auto=compress&cs=tinysrgb&w=800'
-    },
-    {
-      id: 3,
-      category: 'yoga',
-      title: 'Power Yoga',
-      description: 'Combine flexibility, strength, and mindfulness in our yoga sessions.',
-      duration: '60 min',
-      level: 'Beginner',
-      image: 'https://images.pexels.com/photos/3822622/pexels-photo-3822622.jpeg?auto=compress&cs=tinysrgb&w=800'
-    },
-    {
-      id: 4,
-      category: 'strength',
-      title: 'CrossFit',
-      description: 'Functional fitness combining cardio, strength, and flexibility.',
-      duration: '50 min',
-      level: 'Advanced',
-      image: 'https://images.pexels.com/photos/1552106/pexels-photo-1552106.jpeg?auto=compress&cs=tinysrgb&w=800'
-    }
-  ];
+  useEffect(() => {
+    fetchPrograms();
+    fetchTrainers();
+  }, []);
 
-  const trainers = [
-    {
-      name: 'Alex Johnson',
-      specialty: 'Strength & Conditioning',
-      experience: '8+ years',
-      image: 'https://images.pexels.com/photos/1431282/pexels-photo-1431282.jpeg?auto=compress&cs=tinysrgb&w=400'
-    },
-    {
-      name: 'Sarah Chen',
-      specialty: 'Yoga & Pilates',
-      experience: '6+ years',
-      image: 'https://images.pexels.com/photos/3768916/pexels-photo-3768916.jpeg?auto=compress&cs=tinysrgb&w=400'
-    },
-    {
-      name: 'Mike Rodriguez',
-      specialty: 'HIIT & Cardio',
-      experience: '10+ years',
-      image: 'https://images.pexels.com/photos/1431283/pexels-photo-1431283.jpeg?auto=compress&cs=tinysrgb&w=400'
+  const fetchPrograms = async () => {
+    const { data, error } = await supabase
+      .from('programs')
+      .select(`
+        *,
+        trainer:trainers(*)
+      `)
+      .order('created_at', { ascending: true });
+
+    if (!error && data) {
+      setPrograms(data);
     }
-  ];
+  };
+
+  const fetchTrainers = async () => {
+    const { data, error } = await supabase
+      .from('trainers')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (!error && data) {
+      setTrainers(data);
+    }
+  };
 
   const filteredPrograms = activeProgram === 'all' 
     ? programs 
@@ -97,6 +90,51 @@ function App() {
       setIsMenuOpen(false);
     }
   };
+
+  const openAuthModal = (mode: 'signin' | 'signup') => {
+    setAuthMode(mode);
+    setAuthModalOpen(true);
+  };
+
+  const handleBookProgram = (program: Program) => {
+    if (!user) {
+      openAuthModal('signin');
+      return;
+    }
+    setSelectedProgram(program);
+    setBookingModalOpen(true);
+  };
+
+  const handleContactSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setContactLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('contact_submissions')
+        .insert({
+          name: contactForm.name,
+          email: contactForm.email,
+          message: contactForm.message
+        });
+
+      if (!error) {
+        setContactSuccess(true);
+        setContactForm({ name: '', email: '', message: '' });
+        setTimeout(() => setContactSuccess(false), 5000);
+      }
+    } catch (error) {
+      console.error('Error submitting contact form:', error);
+    } finally {
+      setContactLoading(false);
+    }
+  };
+
+  if (authLoading) {
+    return <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
+    </div>;
+  }
 
   return (
     <div className="bg-gray-900 text-white">
@@ -120,9 +158,23 @@ function App() {
               <button onClick={() => scrollToSection('programs')} className="hover:text-cyan-400 transition-colors">Programs</button>
               <button onClick={() => scrollToSection('trainers')} className="hover:text-cyan-400 transition-colors">Trainers</button>
               <button onClick={() => scrollToSection('pricing')} className="hover:text-cyan-400 transition-colors">Pricing</button>
-              <button onClick={() => scrollToSection('contact')} className="bg-gradient-to-r from-cyan-500 to-orange-500 px-6 py-2 rounded-full hover:shadow-lg hover:shadow-cyan-500/25 transition-all">
-                Join Now
-              </button>
+              {user ? (
+                <button 
+                  onClick={() => setDashboardOpen(true)}
+                  className="flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-orange-500 px-6 py-2 rounded-full hover:shadow-lg hover:shadow-cyan-500/25 transition-all"
+                >
+                  <User className="h-4 w-4" />
+                  Dashboard
+                </button>
+              ) : (
+                <button 
+                  onClick={() => openAuthModal('signin')}
+                  className="flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-orange-500 px-6 py-2 rounded-full hover:shadow-lg hover:shadow-cyan-500/25 transition-all"
+                >
+                  <LogIn className="h-4 w-4" />
+                  Sign In
+                </button>
+              )}
             </div>
 
             {/* Mobile Menu Button */}
@@ -143,9 +195,21 @@ function App() {
                 <button onClick={() => scrollToSection('programs')} className="text-left hover:text-cyan-400 transition-colors">Programs</button>
                 <button onClick={() => scrollToSection('trainers')} className="text-left hover:text-cyan-400 transition-colors">Trainers</button>
                 <button onClick={() => scrollToSection('pricing')} className="text-left hover:text-cyan-400 transition-colors">Pricing</button>
-                <button onClick={() => scrollToSection('contact')} className="bg-gradient-to-r from-cyan-500 to-orange-500 px-6 py-2 rounded-full text-center">
-                  Join Now
-                </button>
+                {user ? (
+                  <button 
+                    onClick={() => setDashboardOpen(true)}
+                    className="bg-gradient-to-r from-cyan-500 to-orange-500 px-6 py-2 rounded-full text-center"
+                  >
+                    Dashboard
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => openAuthModal('signin')}
+                    className="bg-gradient-to-r from-cyan-500 to-orange-500 px-6 py-2 rounded-full text-center"
+                  >
+                    Sign In
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -286,8 +350,11 @@ function App() {
                 <div className="p-6">
                   <h3 className="text-2xl font-bold mb-3">{program.title}</h3>
                   <p className="text-gray-400 mb-4">{program.description}</p>
-                  <button className="bg-gradient-to-r from-cyan-500 to-orange-500 px-6 py-3 rounded-full hover:shadow-lg hover:shadow-cyan-500/25 transition-all">
-                    Learn More
+                  <button 
+                    onClick={() => handleBookProgram(program)}
+                    className="bg-gradient-to-r from-cyan-500 to-orange-500 px-6 py-3 rounded-full hover:shadow-lg hover:shadow-cyan-500/25 transition-all"
+                  >
+                    {user ? 'Book Now' : 'Sign In to Book'}
                   </button>
                 </div>
               </div>
@@ -311,7 +378,7 @@ function App() {
               <div key={index} className="bg-gray-700/50 rounded-2xl overflow-hidden backdrop-blur-sm border border-gray-600/20 hover:border-cyan-500/50 transition-all group">
                 <div className="relative overflow-hidden">
                   <img 
-                    src={trainer.image} 
+                    src={trainer.image_url || 'https://images.pexels.com/photos/1431282/pexels-photo-1431282.jpeg?auto=compress&cs=tinysrgb&w=400'} 
                     alt={trainer.name}
                     className="w-full h-80 object-cover group-hover:scale-105 transition-transform duration-300"
                   />
@@ -323,9 +390,9 @@ function App() {
                   <p className="text-gray-400">{trainer.experience}</p>
                   <div className="flex items-center mt-4">
                     {[...Array(5)].map((_, i) => (
-                      <Star key={i} className="h-4 w-4 text-orange-400 fill-current" />
+                      <Star key={i} className={`h-4 w-4 ${i < Math.floor(trainer.rating) ? 'text-orange-400 fill-current' : 'text-gray-600'}`} />
                     ))}
-                    <span className="text-sm text-gray-400 ml-2">(4.9)</span>
+                    <span className="text-sm text-gray-400 ml-2">({trainer.rating})</span>
                   </div>
                 </div>
               </div>
@@ -367,7 +434,7 @@ function App() {
                 </li>
               </ul>
               <button className="w-full border border-gray-600 py-3 rounded-full hover:bg-gray-700 transition-all">
-                Get Started
+                {user ? 'Current Plan' : 'Get Started'}
               </button>
             </div>
 
@@ -400,7 +467,7 @@ function App() {
                 </li>
               </ul>
               <button className="w-full bg-gradient-to-r from-cyan-500 to-orange-500 py-3 rounded-full hover:shadow-lg hover:shadow-cyan-500/25 transition-all">
-                Get Started
+                {user ? 'Upgrade Plan' : 'Get Started'}
               </button>
             </div>
 
@@ -430,7 +497,7 @@ function App() {
                 </li>
               </ul>
               <button className="w-full border border-gray-600 py-3 rounded-full hover:bg-gray-700 transition-all">
-                Get Started
+                {user ? 'Upgrade Plan' : 'Get Started'}
               </button>
             </div>
           </div>
@@ -493,33 +560,48 @@ function App() {
             </div>
 
             <div className="bg-gray-700/50 p-8 rounded-2xl backdrop-blur-sm border border-gray-600/20">
-              <form className="space-y-6">
+              {contactSuccess && (
+                <div className="mb-6 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                  <p className="text-green-400 text-sm">Thank you! Your message has been sent successfully.</p>
+                </div>
+              )}
+              <form onSubmit={handleContactSubmit} className="space-y-6">
                 <div>
                   <input
                     type="text"
+                    value={contactForm.name}
+                    onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
                     placeholder="Your Name"
                     className="w-full bg-gray-800/50 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-400 transition-colors"
+                    required
                   />
                 </div>
                 <div>
                   <input
                     type="email"
+                    value={contactForm.email}
+                    onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
                     placeholder="Your Email"
                     className="w-full bg-gray-800/50 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-400 transition-colors"
+                    required
                   />
                 </div>
                 <div>
                   <textarea
                     rows={4}
+                    value={contactForm.message}
+                    onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })}
                     placeholder="Your Message"
                     className="w-full bg-gray-800/50 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-400 transition-colors resize-none"
+                    required
                   ></textarea>
                 </div>
                 <button
                   type="submit"
+                  disabled={contactLoading}
                   className="w-full bg-gradient-to-r from-cyan-500 to-orange-500 py-3 rounded-full hover:shadow-lg hover:shadow-cyan-500/25 transition-all"
                 >
-                  Send Message
+                  {contactLoading ? 'Sending...' : 'Send Message'}
                 </button>
               </form>
             </div>
@@ -541,6 +623,23 @@ function App() {
           </div>
         </div>
       </footer>
+
+      {/* Modals */}
+      <AuthModal 
+        isOpen={authModalOpen} 
+        onClose={() => setAuthModalOpen(false)} 
+        initialMode={authMode}
+      />
+      
+      {dashboardOpen && (
+        <Dashboard onClose={() => setDashboardOpen(false)} />
+      )}
+      
+      <BookingModal 
+        isOpen={bookingModalOpen}
+        onClose={() => setBookingModalOpen(false)}
+        program={selectedProgram}
+      />
     </div>
   );
 }
